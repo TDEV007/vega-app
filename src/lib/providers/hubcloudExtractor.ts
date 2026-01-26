@@ -43,10 +43,6 @@ export async function hubcloudExtracter(link: string, signal: AbortSignal) {
       let link = itm.attr('href') || '';
 
       switch (true) {
-        case link?.includes('.dev') && !link?.includes('/?id='):
-          streamLinks.push({server: 'Cf Worker', link: link, type: 'mkv'});
-          break;
-
         case link?.includes('pixeld'):
           if (!link?.includes('api')) {
             const token = link.split('/').pop();
@@ -54,6 +50,10 @@ export async function hubcloudExtracter(link: string, signal: AbortSignal) {
             link = `${baseUrl}/api/file/${token}?download`;
           }
           streamLinks.push({server: 'Pixeldrain', link: link, type: 'mkv'});
+          break;
+
+        case link?.includes('.dev') && !link?.includes('/?id='):
+          streamLinks.push({server: 'Cf Worker', link: link, type: 'mkv'});
           break;
 
         case link?.includes('hubcloud') || link?.includes('/?id='):
@@ -127,7 +127,7 @@ export async function hubcloudExtracter(link: string, signal: AbortSignal) {
           break;
 
         default:
-          if (link?.includes('.mkv')) {
+          if (link?.includes('.mkv') || link?.includes('?token=')) {
             const serverName =
               link
                 .match(/^(?:https?:\/\/)?(?:www\.)?([^\/]+)/i)?.[1]
