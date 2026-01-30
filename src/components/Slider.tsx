@@ -1,5 +1,5 @@
 import {Image, Pressable, Text, TouchableOpacity, View} from 'react-native';
-import React from 'react';
+import React, {memo, useCallback} from 'react';
 import type {Post} from '../lib/providers/types';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useNavigation} from '@react-navigation/native';
@@ -11,7 +11,7 @@ import SkeletonLoader from './Skeleton';
 // import useWatchHistoryStore from '../lib/zustand/watchHistrory';
 import useThemeStore from '../lib/zustand/themeStore';
 
-export default function Slider({
+const Slider = ({
   isLoading,
   title,
   posts,
@@ -25,13 +25,67 @@ export default function Slider({
   filter: string;
   providerValue?: string;
   isSearch?: boolean;
-}): JSX.Element {
+}): React.ReactElement => {
   const {provider} = useContentStore(state => state);
   const {primary} = useThemeStore(state => state);
   const navigation =
     useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const [isSelected, setSelected] = React.useState('');
   // const {removeItem} = useWatchHistoryStore(state => state);
+
+  const handleMorePress = useCallback(() => {
+    navigation.navigate('ScrollList', {
+      title: title,
+      filter: filter,
+      providerValue: providerValue,
+      isSearch: isSearch,
+    });
+  }, [navigation, title, filter, providerValue, isSearch]);
+
+  const handleItemPress = useCallback(
+    (item: Post) => {
+      setSelected('');
+      navigation.navigate('Info', {
+        link: item.link,
+        provider: item.provider || providerValue || provider?.value,
+        poster: item?.image,
+      });
+    },
+    [navigation, providerValue, provider?.value],
+  );
+
+  const renderItem = useCallback(
+    ({item}: {item: Post}) => (
+      <View className="flex flex-col mx-2">
+        <TouchableOpacity
+          onLongPress={e => {
+            e.stopPropagation();
+          }}
+          onPress={e => {
+            e.stopPropagation();
+            handleItemPress(item);
+          }}>
+          <Image
+            className="rounded-md"
+            source={{
+              uri:
+                item?.image ||
+                'https://placehold.jp/24/363636/ffffff/100x150.png?text=vega',
+            }}
+            style={{width: 100, height: 150}}
+          />
+        </TouchableOpacity>
+        <Text className="text-white text-center truncate w-24 text-xs">
+          {item.title.length > 24
+            ? `${item.title.slice(0, 24)}...`
+            : item.title}
+        </Text>
+      </View>
+    ),
+    [handleItemPress],
+  );
+
+  const keyExtractor = useCallback((item: Post) => item.link, []);
 
   return (
     <Pressable onPress={() => setSelected('')} className="gap-3 mt-3 px-2">
@@ -43,15 +97,7 @@ export default function Slider({
           {title}
         </Text>
         {filter !== 'recent' && (
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('ScrollList', {
-                title: title,
-                filter: filter,
-                providerValue: providerValue,
-                isSearch: isSearch,
-              })
-            }>
+          <TouchableOpacity onPress={handleMorePress}>
             <Text className="text-white text-sm">more</Text>
           </TouchableOpacity>
         )}
@@ -69,66 +115,16 @@ export default function Slider({
         </View>
       ) : (
         <FlashList
-          estimatedItemSize={30}
+          estimatedItemSize={100}
           showsHorizontalScrollIndicator={false}
           data={posts}
           extraData={isSelected}
           horizontal
           contentContainerStyle={{paddingHorizontal: 3, paddingTop: 7}}
-          renderItem={({item}) => (
-            <View className="flex flex-col mx-2">
-              <TouchableOpacity
-                onLongPress={e => {
-                  e.stopPropagation();
-                  // if (filter === 'recent') {
-                  //   console.log('long press', filter);
-                  //   ReactNativeHapticFeedback.trigger('effectClick', {
-                  //     enableVibrateFallback: true,
-                  //     ignoreAndroidSystemSettings: false,
-                  //   });
-                  //   setSelected(item.link);
-                  // }
-                }}
-                onPress={e => {
-                  e.stopPropagation();
-                  setSelected('');
-                  navigation.navigate('Info', {
-                    link: item.link,
-                    provider: item.provider || providerValue || provider?.value,
-                    poster: item?.image,
-                  });
-                }}>
-                <Image
-                  className="rounded-md"
-                  source={{
-                    uri:
-                      item?.image ||
-                      'https://placehold.jp/24/363636/ffffff/100x150.png?text=vega',
-                  }}
-                  style={{width: 100, height: 150}}
-                />
-                {/* {isSelected === item.link && (
-                  <View className="absolute top-0 left-0 w-full h-full bg-black/50 flex justify-center items-center z-50">
-                    <AntDesign
-                      name="delete"
-                      size={24}
-                      color="white"
-                      onPress={() => {
-                        console.log('remove', item);
-                        setSelected('');
-                        removeItem(item);
-                      }}
-                    />
-                  </View>
-                )} */}
-              </TouchableOpacity>
-              <Text className="text-white text-center truncate w-24 text-xs">
-                {item.title.length > 24
-                  ? `${item.title.slice(0, 24)}...`
-                  : item.title}
-              </Text>
-            </View>
-          )}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          removeClippedSubviews={true}
+          drawDistance={300}
           ListFooterComponent={
             !isLoading && posts.length === 0 ? (
               <View className="flex flex-row w-96 justify-center h-10 items-center">
@@ -138,9 +134,10 @@ export default function Slider({
               </View>
             ) : null
           }
-          keyExtractor={item => item.link}
         />
       )}
     </Pressable>
   );
-}
+};
+
+export default memo(Slider);

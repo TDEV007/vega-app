@@ -1,4 +1,4 @@
-import React, {useState, useMemo, useCallback} from 'react';
+import React, {useState, useMemo, useCallback, useEffect} from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,10 @@ import Feather from '@expo/vector-icons/Feather';
 import {Dropdown} from 'react-native-element-dropdown';
 import Animated, {
   useAnimatedStyle,
+  useSharedValue,
   withRepeat,
   withTiming,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import * as IntentLauncher from 'expo-intent-launcher';
 import RNReactNativeHapticFeedback from 'react-native-haptic-feedback';
@@ -147,6 +149,27 @@ const SeasonList: React.FC<SeasonListProps> = ({
   const [showServerModal, setShowServerModal] = useState<boolean>(false);
   const [externalPlayerStreams, setExternalPlayerStreams] = useState<any[]>([]);
   const [isLoadingStreams, setIsLoadingStreams] = useState<boolean>(false);
+
+  // VLC loading animation - using shared value so it reacts to vlcLoading state
+  const vlcRotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (vlcLoading) {
+      vlcRotation.value = 0;
+      vlcRotation.value = withRepeat(
+        withTiming(360, {duration: 800}),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(vlcRotation);
+      vlcRotation.value = 0;
+    }
+  }, [vlcLoading]);
+
+  const vlcLoadingAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{rotate: `${vlcRotation.value}deg`}],
+  }));
 
   // Memoized filtering and sorting logic for episodes
   const filteredAndSortedEpisodes = useMemo(() => {
@@ -786,20 +809,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
       {/* VLC Loading Indicator */}
       {vlcLoading && (
         <View className="absolute top-0 left-0 w-full h-full bg-black/60 bg-opacity-50 justify-center items-center">
-          <Animated.View
-            style={[
-              useAnimatedStyle(() => ({
-                transform: [
-                  {
-                    rotate: withRepeat(
-                      withTiming('360deg', {duration: 800}),
-                      -1,
-                      false,
-                    ),
-                  },
-                ],
-              })),
-            ]}>
+          <Animated.View style={[vlcLoadingAnimatedStyle]}>
             <MaterialCommunityIcons name="vlc" size={70} color={primary} />
           </Animated.View>
           <Text className="text-white text-lg font-semibold mt-2">
