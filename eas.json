@@ -35,8 +35,9 @@
         "serviceAccountKeyPath": "./service-account-key.json",
         "track": "internal",
         "releaseStatus": "inProgress",
-        "rollout": 100
+        "rollout": 1
       }
     }
   }
 }
+
