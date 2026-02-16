@@ -1,28 +1,10 @@
-name: React Native CI/CD
+name: Build Release APK (Debug Signed)
 
 on:
   workflow_dispatch:
-    inputs:
-      buildType:
-        type: choice
-        description: "Build type to run"
-        options:
-          - dev
-          - prod-apk
-          - all
-  push:
-    branches:
-      - main
-      - master
-
-env:
-  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-  NODE_OPTIONS: --openssl-legacy-provider
 
 jobs:
-  build-and-deploy:
-    # Combined logic: skip if [skip ci] is in commit, otherwise run on push or dispatch
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: 🏗 Checkout repository
@@ -32,83 +14,34 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          # Removed 'cache: yarn' here to handle the cache manually and avoid the "lock file not found" crash
 
-      - name: 📦 Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: 📦 Setup yarn cache
-        uses: actions/cache@v4 # Updated to v4
+      - name: 🏗 Setup Java
+        uses: actions/setup-java@v4
         with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          # The workflow will now proceed even if yarn.lock is missing (though you should commit one!)
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: 📦 Install dependencies
+        run: yarn install
+
+      - name: 🛠 Prebuild Android
+        run: npx expo prebuild --platform android --clean
+
+      - name: 🔧 Patch Gradle for Debug Signing
         run: |
-          yarn install --frozen-lockfile || yarn install
-          sudo npm install -g eas-cli
+          # Use sed to replace the release signingConfig with the debug one
+          sed -i 's/signingConfig signingConfigs.release/signingConfig signingConfigs.debug/g' android/app/build.gradle
+          echo "Patched android/app/build.gradle to use debug signing for release builds"
 
-      - name: 📱 Setup EAS build cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.eas-build-local
-          key: ${{ runner.os }}-eas-build-local-${{ hashFiles('**/package.json') }}
-
-      - name: 📋 Fix package.json main entry
+      - name: 📱 Build Release APK
         run: |
-          if [ -f ./package.json ]; then
-            # Using node to edit JSON is more portable than installing jq manually
-            node -e "let j = require('./package.json'); j.main = 'node_modules/expo/AppEntry.js'; require('fs').writeFileSync('./package.json', JSON.stringify(j, null, 2))"
-            echo "Updated package.json main entry"
-          else
-            echo "package.json not found"
-            exit 1
-          fi
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
-      - name: 📋 Update metro.config.js for SVG support
-        run: |
-          cat > ./metro.config.js << 'EOFMARKER'
-          const { getDefaultConfig } = require('expo/metro-config');
-          const config = getDefaultConfig(__dirname);
-          const { transformer, resolver } = config;
-
-          config.transformer = {
-            ...transformer,
-            babelTransformerPath: require.resolve('react-native-svg-transformer/expo'),
-          };
-
-          config.resolver = {
-            ...resolver,
-            assetExts: resolver.assetExts.filter(ext => ext !== 'svg'),
-            sourceExts: [...resolver.sourceExts, 'svg'],
-          };
-
-          module.exports = config;
-          EOFMARKER
-
-      - name: 📱 Build Development APK
-        if: github.event.inputs.buildType == 'all' || github.event.inputs.buildType == 'dev' || github.event_name == 'push'
-        run: |
-          export NODE_OPTIONS="--openssl-legacy-provider --max_old_space_size=4096"
-          eas build --platform android --profile development --local --non-interactive --output=./app-dev.apk
-        env:
-          NODE_ENV: development
-
-      - name: 📱 Build Production APK
-        if: github.event.inputs.buildType == 'all' || github.event.inputs.buildType == 'prod-apk' || github.event_name == 'push'
-        run: |
-          export NODE_OPTIONS="--openssl-legacy-provider --max_old_space_size=4096"
-          eas build --platform android --profile production-apk --local --non-interactive --output=./app-prod.apk
-        env:
-          NODE_ENV: production
-
-      - name: 📦 Upload build artifacts
+      - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-builds
-          path: "*.apk"
+          name: release-apk-debug-signed
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 7
